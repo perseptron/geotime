@@ -1,3 +1,7 @@
+// Mandrakesoft 2022
+
+// Package geotime calculate astronomical events as sunrise, solar noon,
+// sunset and some other geographical date-time important variables
 package geotime
 
 import (
@@ -12,158 +16,155 @@ type Geotime struct {
 	Lat       float64
 	Long      float64
 	SolarNoon time.Time
-	HourAngle  time.Duration
+	HourAngle time.Duration
 	Sunrise   time.Time
 	Sunset    time.Time
 	PartOfDay string
+	obliq     float64
+	ganom     float64
+	glong     float64
 }
 
 const (
-	night = "night"
+	night   = "night"
 	sunrise = "sunrise"
 	morning = "morning"
-	day = "day"
-	noon = "noon"
-	sunset = "sunset"
+	day     = "day"
+	noon    = "noon"
+	sunset  = "sunset"
 	evening = "evening"
 )
 
-var gt Geotime
-var jd, jc, ganom, glong, obliq float64
-
-func Calculate(lat, long float64, date time.Time) (gt Geotime) {
-	preCalc(date)
+func Calculate(lat, long float64, date time.Time) Geotime {
+	gt := new(Geotime)
+	preCalc(date, gt)
 	gt.Date = date
 	gt.Lat = lat
 	gt.Long = long
-	gt.Jd = jd
-	gt.Jc = jc
-	gt.SolarNoon = SolarNoon(long, date)
-	gt.HourAngle = HourAngle(lat,date)
-	gt.Sunrise = gt.SolarNoon.Add( -gt.HourAngle)
+	gt.Jd = JD(date)
+	gt.Jc = JC(date)
+	gt.SolarNoon = SolarNoon(long, date, gt)
+	gt.HourAngle = HourAngle(lat, date, gt)
+	gt.Sunrise = gt.SolarNoon.Add(-gt.HourAngle)
 	gt.Sunset = gt.SolarNoon.Add(gt.HourAngle)
-	gt.PartOfDay = PartOfDay(lat,long,date)
-	return gt
+	gt.PartOfDay = PartOfDay(lat, long, date, gt)
+	return *gt
 }
 
 func JD(date time.Time) float64 {
 	epoch := time.Date(1900, time.January, 1, 0, 0, 0, 0, time.UTC)
 	days := date.Sub(epoch).Hours() / 24
 	_, tz := date.Zone()
-	return days+2 + 2415018.5 + float64(date.Hour()/24) - float64(tz/60/60)/24
+	return days + 2 + 2415018.5 + float64(date.Hour()/24) - float64(tz/60/60)/24
 }
 
-func JC() float64 {
-	return (jd - 2451545) / 36525
+func JC(date time.Time) float64 {
+	return (JD(date) - 2451545) / 36525
 }
 
-func obliquity() float64 {
+func obliquity(jc float64) float64 {
 	return 23 + (26+(21.448-jc*(46.815+jc*(0.00059-jc*0.001813)))/60)/60 +
 		0.00256*math.Cos(toRad(125.04-1934.136*jc))
 }
 
-func geomAnomaly() float64 {
+func geomAnomaly(jc float64) float64 {
 	return 357.52911 + jc*(35999.05029-0.0001537*jc)
 }
 
-func geomLong() float64 {
+func geomLong(jc float64) float64 {
 	return math.Mod(280.46646+jc*(36000.76983+jc*0.0003032), 360)
 }
 
-func preCalc(date time.Time) {
-	if jd ==0 {
-		jd = JD(date)
-	}
-	if jc == 0 {
-		jc = JC()
-	}
-	if ganom == 0 {
-		ganom = geomAnomaly()
-	}
-	if glong == 0 {
-		glong = geomLong()
-	}
-	if obliq == 0 {
-		obliq = obliquity()
-	}
+func preCalc(date time.Time, gt *Geotime) {
+	gt.Jd = JD(date)
+	gt.Jc = JC(date)
+	gt.obliq = obliquity(gt.Jc)
+	gt.ganom = geomAnomaly(gt.Jc)
+	gt.glong = geomLong(gt.Jc)
 }
 
-func SolarNoon(long float64, date time.Time) time.Time {
-	preCalc(date)
+func SolarNoon(long float64, date time.Time, gt *Geotime) time.Time {
+	if gt == nil {
+		gt = new(Geotime)
+		preCalc(date, gt)
+	}
+
 	_, tz := date.Zone()
-	y := math.Tan(toRad(obliq/2)) * math.Tan(toRad(obliq/2))
-	eo := 0.016708634 - jc*(0.000042037+0.0000001267*jc)
-	eqt := 4 * toDeg(y*math.Sin(2*toRad(glong))-2*eo*math.Sin(toRad(ganom))+
-		4*eo*y*math.Sin(toRad(ganom))*math.Cos(2*toRad(glong))-
-		0.5*y*y*math.Sin(4*toRad(glong))-1.25*eo*eo*math.Sin(2*toRad(ganom)))
+	y := math.Tan(toRad(gt.obliq/2)) * math.Tan(toRad(gt.obliq/2))
+	eo := 0.016708634 - gt.Jc*(0.000042037+0.0000001267*gt.Jc)
+	eqt := 4 * toDeg(y*math.Sin(2*toRad(gt.glong))-2*eo*math.Sin(toRad(gt.ganom))+
+		4*eo*y*math.Sin(toRad(gt.ganom))*math.Cos(2*toRad(gt.glong))-
+		0.5*y*y*math.Sin(4*toRad(gt.glong))-1.25*eo*eo*math.Sin(2*toRad(gt.ganom)))
 	sn := 720 - 4*long - eqt + float64(tz/60)
-	return truncTime(date).Add(time.Duration(sn*60) * time.Second)
+	gt.SolarNoon = truncTime(date).Add(time.Duration(sn*60) * time.Second)
+	return gt.SolarNoon
 }
 
-func HourAngle(lat float64, date time.Time) time.Duration {
-	preCalc(date)
-	eqCtr := math.Sin(toRad(ganom))*(1.914602-jc*(0.004817+0.000014*jc)) +
-		math.Sin(toRad(2*ganom))*(0.019993-0.000101*jc) + math.Sin(toRad(3*ganom))*0.000289
-	truelong := glong + eqCtr
-	app := truelong - 0.00569 - 0.00478*math.Sin(toRad(125.04-1934.136*jc))
-	decl := toDeg(math.Asin(math.Sin(toRad(obliq)) * math.Sin(toRad(app))))
+func HourAngle(lat float64, date time.Time, gt *Geotime) time.Duration {
+	if gt == nil {
+		gt = new(Geotime)
+		preCalc(date, gt)
+	}
+	eqCtr := math.Sin(toRad(gt.ganom))*(1.914602-gt.Jc*(0.004817+0.000014*gt.Jc)) +
+		math.Sin(toRad(2*gt.ganom))*(0.019993-0.000101*gt.Jc) + math.Sin(toRad(3*gt.ganom))*0.000289
+	truelong := gt.glong + eqCtr
+	app := truelong - 0.00569 - 0.00478*math.Sin(toRad(125.04-1934.136*gt.Jc))
+	decl := toDeg(math.Asin(math.Sin(toRad(gt.obliq)) * math.Sin(toRad(app))))
 	HA := toDeg(math.Acos(math.Cos(toRad(90.833))/(math.Cos(toRad(lat))*math.Cos(toRad(decl))) -
 		math.Tan(toRad(lat))*math.Tan(toRad(decl))))
 	return time.Duration(HA*4) * time.Minute
 }
 
-
 func Sunrise(lat, long float64, date time.Time) time.Time {
-		return SolarNoon(long, date).Add( -HourAngle(lat, date))
+	var gt Geotime
+	preCalc(date, &gt)
+	return SolarNoon(long, date, &gt).Add(-HourAngle(lat, date, &gt))
 
 }
 
 func Sunset(lat, long float64, date time.Time) time.Time {
-		return SolarNoon(long, date).Add(HourAngle(lat, date))
+	var gt Geotime
+	preCalc(date, &gt)
+	return SolarNoon(long, date, &gt).Add(HourAngle(lat, date, &gt))
 }
 
-func PartOfDay(lat, long float64, date time.Time) string {
-	var snoon, srise, sset time.Time
-	var ha time.Duration
-	if snoon = gt.SolarNoon; snoon.IsZero() {
-		snoon = SolarNoon(long, date)
-	}
-	if ha = gt.HourAngle; ha == 0 {
-		ha =HourAngle(lat, date)
-	}
-	if srise = gt.Sunrise; srise.IsZero() {
-		srise = snoon.Add(-ha)
-	}
-	if sset = gt.Sunset; sset.IsZero() {
-		sset = snoon.Add(ha)
+func PartOfDay(lat, long float64, date time.Time, gt *Geotime) string {
+	if gt == nil {
+		gt = new(Geotime)
+		preCalc(date, gt)
+		SolarNoon(long, date, gt)
+		HourAngle(lat, date, gt)
+		gt.Sunrise = gt.SolarNoon.Add(-gt.HourAngle)
+		gt.Sunset = gt.SolarNoon.Add(gt.HourAngle)
 	}
 
-	if date.After(sset.Add(time.Minute * 60)) {
+	if date.After(gt.Sunset.Add(time.Minute * 60)) {
 		return night
 	}
-	if date.After(sset) {
+	if date.After(gt.Sunset) {
 		return evening
 	}
-	if date.After(sset.Add(-time.Minute*20)){
+	if date.After(gt.Sunset.Add(-time.Minute * 20)) {
 		return sunset
 	}
-	if date.After(snoon.Add(-time.Minute * 10)) && date.Before(snoon.Add(time.Minute * 10)) {
+	if date.After(gt.SolarNoon.Add(-time.Minute*10)) && date.Before(gt.SolarNoon.Add(time.Minute*10)) {
 		return noon
 	}
-	if date.After(srise.Add(time.Minute*60)) {
+	if date.After(gt.Sunrise.Add(time.Minute * 60)) {
 		return day
 	}
-	if date.After(srise) {
+	if date.After(gt.Sunrise) {
 		return morning
 	}
-	if date.After(srise.Add(-time.Minute*20)) {
+	if date.After(gt.Sunrise.Add(-time.Minute * 20)) {
 		return sunrise
 	}
 	return night
 }
 
 func truncTime(date time.Time) time.Time {
-	return time.Date(date.Year(), date.Month(), date.Day(), 0,0,0,0, date.Location())
+	//TODO: correct error at the day of time shift
+	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 }
 
 func toDeg(rad float64) float64 {
