@@ -26,13 +26,13 @@ type Geotime struct {
 }
 
 const (
-	night   = "night"
-	sunrise = "sunrise"
-	morning = "morning"
-	day     = "day"
-	noon    = "noon"
-	sunset  = "sunset"
-	evening = "evening"
+	night   = "07 night"
+	sunrise = "01 sunrise"
+	morning = "02 morning"
+	day     = "03 day"
+	noon    = "04 noon"
+	sunset  = "05 sunset"
+	evening = "06 evening"
 )
 
 func Calculate(lat, long float64, date time.Time) Geotime {
@@ -41,8 +41,6 @@ func Calculate(lat, long float64, date time.Time) Geotime {
 	gt.Date = date
 	gt.Lat = lat
 	gt.Long = long
-	gt.Jd = JD(date)
-	gt.Jc = JC(date)
 	gt.SolarNoon = SolarNoon(long, date, gt)
 	gt.HourAngle = HourAngle(lat, date, gt)
 	gt.Sunrise = gt.SolarNoon.Add(-gt.HourAngle)
@@ -112,7 +110,8 @@ func HourAngle(lat float64, date time.Time, gt *Geotime) time.Duration {
 	decl := toDeg(math.Asin(math.Sin(toRad(gt.obliq)) * math.Sin(toRad(app))))
 	HA := toDeg(math.Acos(math.Cos(toRad(90.833))/(math.Cos(toRad(lat))*math.Cos(toRad(decl))) -
 		math.Tan(toRad(lat))*math.Tan(toRad(decl))))
-	return time.Duration(HA*4) * time.Minute
+	gt.HourAngle = time.Duration(HA*4) * time.Minute
+	return gt.HourAngle
 }
 
 func Sunrise(lat, long float64, date time.Time) time.Time {
@@ -141,22 +140,22 @@ func PartOfDay(lat, long float64, date time.Time, gt *Geotime) string {
 	if date.After(gt.Sunset.Add(time.Minute * 60)) {
 		return night
 	}
-	if date.After(gt.Sunset) {
+	if date.After(gt.Sunset.Add(time.Minute * 10)) {
 		return evening
 	}
-	if date.After(gt.Sunset.Add(-time.Minute * 20)) {
+	if date.After(gt.Sunset.Add(-time.Minute * 25)) {
 		return sunset
 	}
-	if date.After(gt.SolarNoon.Add(-time.Minute*10)) && date.Before(gt.SolarNoon.Add(time.Minute*10)) {
+	if date.After(gt.SolarNoon.Add(-time.Minute*12)) && date.Before(gt.SolarNoon.Add(time.Minute*12)) {
 		return noon
 	}
-	if date.After(gt.Sunrise.Add(time.Minute * 60)) {
+	if date.After(gt.Sunrise.Add(time.Minute * 65)) {
 		return day
 	}
-	if date.After(gt.Sunrise) {
+	if date.After(gt.Sunrise.Add(time.Minute * 10)) {
 		return morning
 	}
-	if date.After(gt.Sunrise.Add(-time.Minute * 20)) {
+	if date.After(gt.Sunrise.Add(-time.Minute * 45)) {
 		return sunrise
 	}
 	return night
