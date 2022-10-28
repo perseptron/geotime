@@ -26,13 +26,13 @@ type Geotime struct {
 }
 
 const (
-	night   = "07 night"
-	sunrise = "01 sunrise"
-	morning = "02 morning"
-	day     = "03 day"
-	noon    = "04 noon"
-	sunset  = "05 sunset"
-	evening = "06 evening"
+	night   = "night"
+	sunrise = "sunrise"
+	morning = "morning"
+	day     = "day"
+	noon    = "noon"
+	sunset  = "sunset"
+	evening = "evening"
 )
 
 func Calculate(lat, long float64, date time.Time) Geotime {
